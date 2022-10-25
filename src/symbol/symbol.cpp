@@ -2,7 +2,6 @@
 #include <go/binary/binary.h>
 #include <algorithm>
 #include <cstring>
-#include <cstddef>
 
 constexpr auto STACK_TOP_FUNCTION = {
         "runtime.mstart",
@@ -83,10 +82,10 @@ go::symbol::SymbolIterator go::symbol::SymbolTable::end() {
 const std::byte *go::symbol::SymbolTable::data() {
     size_t index = mMemoryBuffer.index();
 
-    if (index == 1) {
+    if (index == 0) {
         return std::get<std::shared_ptr<elf::ISection>>(mMemoryBuffer)->data();
-    } else if (index == 2) {
-        return std::get<std::shared_ptr<std::byte[]>>(mMemoryBuffer).get();
+    } else if (index == 1) {
+        return std::get<std::unique_ptr<std::byte[]>>(mMemoryBuffer).get();
     }
 
     return std::get<const std::byte *>(mMemoryBuffer);

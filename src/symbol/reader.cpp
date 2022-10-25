@@ -1,7 +1,6 @@
 #include <go/symbol/reader.h>
 #include <zero/log.h>
 #include <algorithm>
-#include <unistd.h>
 
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 0x1000
@@ -9,7 +8,9 @@
 
 constexpr auto SYMBOL_SECTION = "gopclntab";
 constexpr auto BUILD_INFO_SECTION = "buildinfo";
+
 constexpr auto BUILD_INFO_MAGIC = "\xff Go buildinf:";
+constexpr auto BUILD_INFO_MAGIC_SIZE = 14;
 
 constexpr auto SYMBOL_MAGIC_12 = 0xfffffffb;
 constexpr auto SYMBOL_MAGIC_116 = 0xfffffffa;
@@ -58,7 +59,7 @@ std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {
 
     const std::byte *buffer = it->operator*().data();
 
-    if (memcmp(buffer, BUILD_INFO_MAGIC, strlen(BUILD_INFO_MAGIC)) != 0) {
+    if (memcmp(buffer, BUILD_INFO_MAGIC, BUILD_INFO_MAGIC_SIZE) != 0) {
         LOG_ERROR("invalid build info magic");
         return std::nullopt;
     }
@@ -135,9 +136,9 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(AccessMethod 
     if (method == FileMapping) {
         return SymbolTable(version, bigEndian, *it, dynamic ? base - minVA : 0);
     } else if (method == AnonymousMemory) {
-        std::shared_ptr<std::byte[]> buffer(new std::byte[it->operator*().size()]);
+        std::unique_ptr<std::byte[]> buffer = std::make_unique<std::byte[]>(it->operator*().size());
         memcpy(buffer.get(), it->operator*().data(), it->operator*().size());
-        return SymbolTable(version, bigEndian, buffer, dynamic ? base - minVA : 0);
+        return SymbolTable(version, bigEndian, std::move(buffer), dynamic ? base - minVA : 0);
     }
 
     if (!dynamic)

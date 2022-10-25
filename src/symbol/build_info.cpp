@@ -108,21 +108,21 @@ std::optional<go::symbol::ModuleInfo> go::symbol::BuildInfo::moduleInfo() {
             if (!module)
                 continue;
 
-            moduleInfo.main = *module;
+            moduleInfo.main = std::move(*module);
         } else if (zero::strings::startsWith(m, "dep")) {
             std::optional<Module> module = readEntry(m);
 
             if (!module)
                 continue;
 
-            moduleInfo.deps.push_back(*module);
+            moduleInfo.deps.push_back(std::move(*module));
         } else if (zero::strings::startsWith(m, "=>")) {
             std::optional<Module> module = readEntry(m);
 
             if (!module)
                 continue;
 
-            moduleInfo.deps.back().replace = std::make_shared<Module>(*module);
+            moduleInfo.deps.back().replace = std::make_unique<Module>(std::move(*module));
         }
     }
 
@@ -132,9 +132,9 @@ std::optional<go::symbol::ModuleInfo> go::symbol::BuildInfo::moduleInfo() {
 std::optional<std::string> go::symbol::BuildInfo::readString(const std::byte *data) {
     auto read = [=](const std::byte *ptr) -> uint64_t {
         if (mPtrSize == 4)
-            return mBigEndian ? betoh32(*(uint32_t *) ptr) : letoh32(*(uint32_t *) ptr);
+            return mBigEndian ? be32toh(*(uint32_t *) ptr) : le32toh(*(uint32_t *) ptr);
 
-        return mBigEndian ? betoh64(*(uint64_t *) ptr) : letoh64(*(uint64_t *) ptr);
+        return mBigEndian ? be64toh(*(uint64_t *) ptr) : le64toh(*(uint64_t *) ptr);
     };
 
     std::optional<std::vector<std::byte>> buffer = peek(read(data), 2 * mPtrSize);

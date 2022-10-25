@@ -1,6 +1,8 @@
 #ifndef GO_SYMBOL_BINARY_H
 #define GO_SYMBOL_BINARY_H
 
+#include <cstdint>
+#include <cstddef>
 #include <optional>
 
 namespace go::binary {

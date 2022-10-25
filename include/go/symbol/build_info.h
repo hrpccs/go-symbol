@@ -10,7 +10,7 @@ namespace go::symbol {
         std::string path;
         std::string version;
         std::string sum;
-        std::shared_ptr<Module> replace;
+        std::unique_ptr<Module> replace;
     };
 
     struct ModuleInfo {
