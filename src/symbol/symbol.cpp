@@ -71,8 +71,20 @@ go::symbol::SymbolTable::SymbolTable(SymbolVersion version, bool bigEndian, Memo
     }
 }
 
+go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) {
+    return std::upper_bound(begin(), end(), address, [&](uint64_t value, const auto &entry) {
+        return value < entry.symbol().entry();
+    });
+}
+
+go::symbol::SymbolIterator go::symbol::SymbolTable::find(std::string_view name) {
+    return std::find_if(begin(), end(), [=](const auto &entry) {
+        return name == entry.symbol().name();
+    });
+}
+
 go::symbol::SymbolIterator go::symbol::SymbolTable::begin() {
-    return {*this, mFuncTable};
+    return {this, mFuncTable};
 }
 
 go::symbol::SymbolIterator go::symbol::SymbolTable::end() {
@@ -106,19 +118,19 @@ uint64_t go::symbol::SymbolTable::peek(const std::byte *ptr) const {
     return convert(*(uint64_t *) ptr);
 }
 
-go::symbol::Symbol::Symbol(const go::symbol::SymbolTable &table, const std::byte *buffer) : mTable(table), mBuffer(buffer) {
+go::symbol::Symbol::Symbol(const go::symbol::SymbolTable *table, const std::byte *buffer) : mTable(table), mBuffer(buffer) {
 
 }
 
 uint64_t go::symbol::Symbol::entry() const {
-    if (mTable.mVersion < VERSION118)
-        return mTable.mBase + mTable.peek(mBuffer);
+    if (mTable->mVersion < VERSION118)
+        return mTable->mBase + mTable->peek(mBuffer);
 
-    return mTable.mBase + mTable.convert(*(uint32_t *) mBuffer);
+    return mTable->mBase + mTable->convert(*(uint32_t *) mBuffer);
 }
 
 const char *go::symbol::Symbol::name() const {
-    return (const char *) mTable.mFuncNameTable + field(1);
+    return (const char *) mTable->mFuncNameTable + field(1);
 }
 
 int go::symbol::Symbol::frameSize(uint64_t pc) const {
@@ -132,7 +144,7 @@ int go::symbol::Symbol::frameSize(uint64_t pc) const {
     if (x == -1)
         return 0;
 
-    if (x & (mTable.mPtrSize - 1))
+    if (x & (mTable->mPtrSize - 1))
         return 0;
 
     return x;
@@ -145,22 +157,22 @@ int go::symbol::Symbol::sourceLine(uint64_t pc) const {
 const char *go::symbol::Symbol::sourceFile(uint64_t pc) const {
     int n = value(field(5), entry(), pc);
 
-    if (n < 0 || n > mTable.mFileNum)
+    if (n < 0 || n > mTable->mFileNum)
         return "";
 
-    if (mTable.mVersion == VERSION12) {
+    if (mTable->mVersion == VERSION12) {
         if (n == 0)
             return "";
 
-        return (const char *) mTable.mFuncData + *(int *) (mTable.mFileTable + n * 4);
+        return (const char *) mTable->mFuncData + *(int *) (mTable->mFileTable + n * 4);
     }
 
-    uint32_t offset = *(uint32_t *) (mTable.mCuTable + (field(8) + n) * 4);
+    uint32_t offset = *(uint32_t *) (mTable->mCuTable + (field(8) + n) * 4);
 
     if (!offset)
         return "";
 
-    return (const char *) mTable.mFileTable + offset;
+    return (const char *) mTable->mFileTable + offset;
 }
 
 bool go::symbol::Symbol::isStackTop() const {
@@ -170,11 +182,11 @@ bool go::symbol::Symbol::isStackTop() const {
 }
 
 uint32_t go::symbol::Symbol::field(int n) const {
-    return mTable.convert(*(uint32_t *) (mBuffer + (mTable.mVersion >= VERSION118 ? 4 : mTable.mPtrSize) + (n - 1) * 4));
+    return mTable->convert(*(uint32_t *) (mBuffer + (mTable->mVersion >= VERSION118 ? 4 : mTable->mPtrSize) + (n - 1) * 4));
 }
 
 int go::symbol::Symbol::value(uint32_t offset, uint64_t entry, uint64_t target) const {
-    const std::byte *buffer = mTable.mPCTable + offset;
+    const std::byte *buffer = mTable->mPCTable + offset;
 
     int value = -1;
     uint64_t pc = entry;
@@ -196,7 +208,7 @@ int go::symbol::Symbol::value(uint32_t offset, uint64_t entry, uint64_t target) 
         if (!result)
             return -1;
 
-        pc += result->first * mTable.mQuantum;
+        pc += result->first * mTable->mQuantum;
         buffer += result->second;
 
         if (target < pc)
@@ -206,7 +218,7 @@ int go::symbol::Symbol::value(uint32_t offset, uint64_t entry, uint64_t target) 
     return value;
 }
 
-go::symbol::SymbolEntry::SymbolEntry(const go::symbol::SymbolTable &table, uint64_t entry, uint64_t offset) : mTable(table), mEntry(entry), mOffset(offset) {
+go::symbol::SymbolEntry::SymbolEntry(const go::symbol::SymbolTable *table, uint64_t entry, uint64_t offset) : mTable(table), mEntry(entry), mOffset(offset) {
 
 }
 
@@ -215,22 +227,27 @@ uint64_t go::symbol::SymbolEntry::entry() const {
 }
 
 go::symbol::Symbol go::symbol::SymbolEntry::symbol() const {
-    return {mTable, mTable.mFuncData + mOffset};
+    return {mTable, mTable->mFuncData + mOffset};
 }
 
-go::symbol::SymbolIterator::SymbolIterator(const go::symbol::SymbolTable &table, const std::byte *buffer) : mTable(table), mBuffer(buffer), mSize(table.mVersion >= VERSION118 ? 4 : table.mPtrSize) {
+go::symbol::SymbolIterator::SymbolIterator(const go::symbol::SymbolTable *table, const std::byte *buffer) : mTable(table), mBuffer(buffer), mSize(table->mVersion >= VERSION118 ? 4 : table->mPtrSize) {
 
 }
 
 go::symbol::SymbolEntry go::symbol::SymbolIterator::operator*() {
     auto peek = [=](const std::byte *address) -> uint64_t {
         if (mSize == 4)
-            return mTable.convert(*(uint32_t *) address);
+            return mTable->convert(*(uint32_t *) address);
 
-        return mTable.convert(*(uint64_t *) address);
+        return mTable->convert(*(uint64_t *) address);
     };
 
-    return {mTable, mTable.mBase + peek(mBuffer), peek(mBuffer + mSize)};
+    return {mTable, mTable->mBase + peek(mBuffer), peek(mBuffer + mSize)};
+}
+
+go::symbol::SymbolIterator &go::symbol::SymbolIterator::operator--() {
+    mBuffer -= 2 * mSize;
+    return *this;
 }
 
 go::symbol::SymbolIterator &go::symbol::SymbolIterator::operator++() {
@@ -253,4 +270,8 @@ bool go::symbol::SymbolIterator::operator==(const go::symbol::SymbolIterator &rh
 
 bool go::symbol::SymbolIterator::operator!=(const go::symbol::SymbolIterator &rhs) {
     return !operator==(rhs);
+}
+
+std::ptrdiff_t go::symbol::SymbolIterator::operator-(const go::symbol::SymbolIterator &rhs) {
+    return (mBuffer - rhs.mBuffer) / 2 * mSize;
 }

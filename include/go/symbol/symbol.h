@@ -20,6 +20,10 @@ namespace go::symbol {
         SymbolTable(SymbolVersion version, bool bigEndian, MemoryBuffer memoryBuffer, uint64_t base);
 
     public:
+        SymbolIterator find(uint64_t address);
+        SymbolIterator find(std::string_view name);
+
+    public:
         SymbolIterator begin();
         SymbolIterator end();
 
@@ -58,7 +62,7 @@ namespace go::symbol {
 
     class Symbol {
     public:
-        Symbol(const SymbolTable &table, const std::byte *buffer);
+        Symbol(const SymbolTable *table, const std::byte *buffer);
 
     public:
         [[nodiscard]] uint64_t entry() const;
@@ -80,12 +84,12 @@ namespace go::symbol {
 
     private:
         const std::byte *mBuffer;
-        const SymbolTable &mTable;
+        const SymbolTable *mTable;
     };
 
     class SymbolEntry {
     public:
-        SymbolEntry(const SymbolTable &table, uint64_t entry, uint64_t offset);
+        SymbolEntry(const SymbolTable *table, uint64_t entry, uint64_t offset);
 
     public:
         [[nodiscard]] uint64_t entry() const;
@@ -94,7 +98,7 @@ namespace go::symbol {
     private:
         uint64_t mEntry;
         uint64_t mOffset;
-        const SymbolTable &mTable;
+        const SymbolTable *mTable;
     };
 
     class SymbolIterator {
@@ -106,10 +110,11 @@ namespace go::symbol {
         using iterator_category = std::random_access_iterator_tag;
 
     public:
-        SymbolIterator(const SymbolTable &table, const std::byte *buffer);
+        SymbolIterator(const SymbolTable *table, const std::byte *buffer);
 
     public:
         SymbolEntry operator*();
+        SymbolIterator &operator--();
         SymbolIterator &operator++();
         SymbolIterator &operator+=(std::ptrdiff_t offset);
         SymbolIterator operator+(std::ptrdiff_t offset);
@@ -118,10 +123,13 @@ namespace go::symbol {
         bool operator==(const SymbolIterator &rhs);
         bool operator!=(const SymbolIterator &rhs);
 
+    public:
+        std::ptrdiff_t operator-(const SymbolIterator &rhs);
+
     private:
-        size_t mSize;
+        std::ptrdiff_t mSize;
         const std::byte *mBuffer;
-        const SymbolTable &mTable;
+        const SymbolTable *mTable;
     };
 }
 
