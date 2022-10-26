@@ -76,7 +76,7 @@ go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) {
         return end();
 
     return std::upper_bound(begin(), end() + 1, address, [](uint64_t value, const auto &entry) {
-        return value < entry.symbol().entry();
+        return value < entry.entry();
     }) - 1;
 }
 
