@@ -17,9 +17,9 @@ constexpr auto SYMBOL_MAGIC_116 = 0xfffffffa;
 constexpr auto SYMBOL_MAGIC_118 = 0xfffffff0;
 constexpr auto SYMBOL_MAGIC_120 = 0xfffffff1;
 
-bool go::symbol::Reader::open(const std::string &path) {
+bool go::symbol::Reader::load(const std::string &path) {
     if (!mReader.load(path)) {
-        LOG_ERROR("open elf failed: %s", path.c_str());
+        LOG_ERROR("load elf failed: %s", path.c_str());
         return false;
     }
 
@@ -57,9 +57,7 @@ std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {
         return std::nullopt;
     }
 
-    const std::byte *buffer = it->operator*().data();
-
-    if (memcmp(buffer, BUILD_INFO_MAGIC, BUILD_INFO_MAGIC_SIZE) != 0) {
+    if (memcmp(it->operator*().data(), BUILD_INFO_MAGIC, BUILD_INFO_MAGIC_SIZE) != 0) {
         LOG_ERROR("invalid build info magic");
         return std::nullopt;
     }

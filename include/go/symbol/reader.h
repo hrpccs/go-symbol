@@ -13,7 +13,7 @@ namespace go::symbol {
 
     class Reader {
     public:
-        bool open(const std::string &path);
+        bool load(const std::string &path);
 
     public:
         std::optional<BuildInfo> buildInfo();
