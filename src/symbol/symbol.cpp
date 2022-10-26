@@ -72,15 +72,22 @@ go::symbol::SymbolTable::SymbolTable(SymbolVersion version, bool bigEndian, Memo
 }
 
 go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) {
-    return std::upper_bound(begin(), end(), address, [&](uint64_t value, const auto &entry) {
+    if (address < operator[](0).entry() || address >= operator[](mFuncNum).entry())
+        return end();
+
+    return std::upper_bound(begin(), end() + 1, address, [](uint64_t value, const auto &entry) {
         return value < entry.symbol().entry();
-    });
+    }) - 1;
 }
 
 go::symbol::SymbolIterator go::symbol::SymbolTable::find(std::string_view name) {
     return std::find_if(begin(), end(), [=](const auto &entry) {
         return name == entry.symbol().name();
     });
+}
+
+go::symbol::SymbolEntry go::symbol::SymbolTable::operator[](size_t index) {
+    return *(begin() + std::ptrdiff_t(index));
 }
 
 go::symbol::SymbolIterator go::symbol::SymbolTable::begin() {
@@ -260,6 +267,10 @@ go::symbol::SymbolIterator &go::symbol::SymbolIterator::operator+=(std::ptrdiff_
     return *this;
 }
 
+go::symbol::SymbolIterator go::symbol::SymbolIterator::operator-(std::ptrdiff_t offset) {
+    return {mTable, mBuffer - offset * 2 * mSize};
+}
+
 go::symbol::SymbolIterator go::symbol::SymbolIterator::operator+(std::ptrdiff_t offset) {
     return {mTable, mBuffer + offset * 2 * mSize};
 }
@@ -273,5 +284,5 @@ bool go::symbol::SymbolIterator::operator!=(const go::symbol::SymbolIterator &rh
 }
 
 std::ptrdiff_t go::symbol::SymbolIterator::operator-(const go::symbol::SymbolIterator &rhs) {
-    return (mBuffer - rhs.mBuffer) / 2 * mSize;
+    return (mBuffer - rhs.mBuffer) / (2 * mSize);
 }

@@ -12,6 +12,7 @@ namespace go::symbol {
         VERSION120
     };
 
+    class SymbolEntry;
     class SymbolIterator;
 
     class SymbolTable {
@@ -22,6 +23,9 @@ namespace go::symbol {
     public:
         SymbolIterator find(uint64_t address);
         SymbolIterator find(std::string_view name);
+
+    public:
+        SymbolEntry operator[](size_t index);
 
     public:
         SymbolIterator begin();
@@ -117,6 +121,7 @@ namespace go::symbol {
         SymbolIterator &operator--();
         SymbolIterator &operator++();
         SymbolIterator &operator+=(std::ptrdiff_t offset);
+        SymbolIterator operator-(std::ptrdiff_t offset);
         SymbolIterator operator+(std::ptrdiff_t offset);
 
     public:
