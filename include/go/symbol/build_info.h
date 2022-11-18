@@ -2,7 +2,6 @@
 #define GO_SYMBOL_BUILD_INFO_H
 
 #include <elf/reader.h>
-#include <optional>
 #include <list>
 
 namespace go::symbol {
@@ -19,18 +18,28 @@ namespace go::symbol {
         std::list<Module> deps;
     };
 
+    class Version {
+    public:
+        explicit Version(std::string_view version);
+
+    public:
+        [[nodiscard]] std::string string() const;
+        [[nodiscard]] std::optional<std::tuple<int, int>> number() const;
+
+    private:
+        std::string mVersion;
+    };
+
     class BuildInfo {
     public:
         BuildInfo(elf::Reader reader, std::shared_ptr<elf::ISection> section);
 
     public:
-        std::optional<std::string> version();
-        std::optional<std::tuple<int, int>> versionNumber();
+        std::optional<Version> version();
         std::optional<ModuleInfo> moduleInfo();
 
     private:
         std::optional<std::string> readString(const std::byte *data);
-        std::optional<std::vector<std::byte>> peek(uint64_t address, uint64_t length);
 
     private:
         size_t mPtrSize;

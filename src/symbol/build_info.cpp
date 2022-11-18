@@ -11,35 +11,18 @@ constexpr auto BUILD_INFO_MAGIC_SIZE = 14;
 constexpr auto POINTER_FREE_OFFSET = 32;
 constexpr auto POINTER_FREE_FLAG = std::byte{0x2};
 
-go::symbol::BuildInfo::BuildInfo(elf::Reader reader, std::shared_ptr<elf::ISection> section) : mReader(std::move(reader)), mSection(std::move(section)) {
-    mPtrSize = std::to_integer<size_t>(mSection->data()[BUILD_INFO_MAGIC_SIZE]);
-    mBigEndian = std::to_integer<bool>(mSection->data()[BUILD_INFO_MAGIC_SIZE + 1]);
-    mPointerFree = std::to_integer<bool>(mSection->data()[BUILD_INFO_MAGIC_SIZE + 1] & POINTER_FREE_FLAG);
+go::symbol::Version::Version(std::string_view version) : mVersion(version) {
+
 }
 
-std::optional<std::string> go::symbol::BuildInfo::version() {
-    const std::byte *buffer = mSection->data();
-
-    if (!mPointerFree)
-        return readString(buffer + BUILD_INFO_OFFSET);
-
-    std::optional<std::pair<uint64_t, int>> result = binary::uVarInt(buffer + POINTER_FREE_OFFSET);
-
-    if (!result)
-        return std::nullopt;
-
-    return std::string{(char *) buffer + POINTER_FREE_OFFSET + result->second, result->first};
+std::string go::symbol::Version::string() const {
+    return mVersion;
 }
 
-std::optional<std::tuple<int, int>> go::symbol::BuildInfo::versionNumber() {
-    std::optional<std::string> ver = version();
-
-    if (!ver)
-        return std::nullopt;
-
+std::optional<std::tuple<int, int>> go::symbol::Version::number() const {
     std::smatch match;
 
-    if (!std::regex_match(*ver, match, std::regex(R"(^go(\d+)\.(\d+).*)")))
+    if (!std::regex_match(mVersion, match, std::regex(R"(^go(\d+)\.(\d+).*)")))
         return std::nullopt;
 
     std::optional<int> major = zero::strings::toNumber<int>(match.str(1));
@@ -49,6 +32,32 @@ std::optional<std::tuple<int, int>> go::symbol::BuildInfo::versionNumber() {
         return std::nullopt;
 
     return std::tuple<int, int>{*major, *minor};
+}
+
+go::symbol::BuildInfo::BuildInfo(elf::Reader reader, std::shared_ptr<elf::ISection> section) : mReader(std::move(reader)), mSection(std::move(section)) {
+    mPtrSize = std::to_integer<size_t>(mSection->data()[BUILD_INFO_MAGIC_SIZE]);
+    mBigEndian = std::to_integer<bool>(mSection->data()[BUILD_INFO_MAGIC_SIZE + 1]);
+    mPointerFree = std::to_integer<bool>(mSection->data()[BUILD_INFO_MAGIC_SIZE + 1] & POINTER_FREE_FLAG);
+}
+
+std::optional<go::symbol::Version> go::symbol::BuildInfo::version() {
+    const std::byte *buffer = mSection->data();
+
+    if (!mPointerFree) {
+        std::optional<std::string> str = readString(buffer + BUILD_INFO_OFFSET);
+
+        if (!str)
+            return std::nullopt;
+
+        return Version(*str);
+    }
+
+    std::optional<std::pair<uint64_t, int>> result = binary::uVarInt(buffer + POINTER_FREE_OFFSET);
+
+    if (!result)
+        return std::nullopt;
+
+    return Version({(char *) buffer + POINTER_FREE_OFFSET + result->second, result->first});
 }
 
 std::optional<go::symbol::ModuleInfo> go::symbol::BuildInfo::moduleInfo() {
@@ -137,40 +146,15 @@ std::optional<std::string> go::symbol::BuildInfo::readString(const std::byte *da
         return mBigEndian ? be64toh(*(uint64_t *) ptr) : le64toh(*(uint64_t *) ptr);
     };
 
-    std::optional<std::vector<std::byte>> buffer = peek(read(data), 2 * mPtrSize);
+    std::optional<std::vector<std::byte>> buffer = mReader.readVirtualMemory(read(data), mPtrSize * 2);
 
     if (!buffer)
         return std::nullopt;
 
-    buffer = peek(read(buffer->data()), read(buffer->data() + mPtrSize));
+    buffer = mReader.readVirtualMemory(read(buffer->data()), read(buffer->data() + mPtrSize));
 
     if (!buffer)
         return std::nullopt;
 
     return std::string{(char *) buffer->data(), buffer->size()};
-}
-
-std::optional<std::vector<std::byte>> go::symbol::BuildInfo::peek(uint64_t address, uint64_t length) {
-    std::vector<std::shared_ptr<elf::ISegment>> segments = mReader.segments();
-
-    auto it = std::find_if(
-            segments.begin(),
-            segments.end(),
-            [=](const auto &segment) {
-                if (segment->type() != PT_LOAD)
-                    return false;
-
-                return address >= segment->virtualAddress() && address <= segment->virtualAddress() + segment->fileSize() - 1;
-            });
-
-    if (it == segments.end())
-        return std::nullopt;
-
-    if (it->operator*().virtualAddress() + it->operator*().fileSize() - address < length)
-        return std::nullopt;
-
-    return std::vector<std::byte>{
-            it->operator*().data() + address - it->operator*().virtualAddress(),
-            it->operator*().data() + address - it->operator*().virtualAddress() + length
-    };
 }

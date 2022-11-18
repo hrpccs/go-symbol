@@ -1,4 +1,5 @@
 #include <go/symbol/reader.h>
+#include <elf/symbol.h>
 #include <zero/log.h>
 #include <algorithm>
 
@@ -11,6 +12,8 @@ constexpr auto BUILD_INFO_SECTION = "buildinfo";
 
 constexpr auto BUILD_INFO_MAGIC = "\xff Go buildinf:";
 constexpr auto BUILD_INFO_MAGIC_SIZE = 14;
+
+constexpr auto VERSION_SYMBOL = "runtime.buildVersion";
 
 constexpr auto SYMBOL_MAGIC_12 = 0xfffffffb;
 constexpr auto SYMBOL_MAGIC_116 = 0xfffffffa;
@@ -39,6 +42,55 @@ bool go::symbol::Reader::load(const std::string &path) {
     }
 
     return true;
+}
+
+std::optional<go::symbol::Version> go::symbol::Reader::version() {
+    std::optional<go::symbol::BuildInfo> buildInfo = this->buildInfo();
+
+    if (buildInfo)
+        return buildInfo->version();
+
+    std::vector<std::shared_ptr<elf::ISection>> sections = mReader.sections();
+
+    auto it = std::find_if(sections.begin(), sections.end(), [](const auto &section) {
+        return section->type() == SHT_SYMTAB;
+    });
+
+    if (it == sections.end())
+        return std::nullopt;
+
+    elf::SymbolTable symbolTable(mReader, *it);
+
+    auto symbolIterator = std::find_if(symbolTable.begin(), symbolTable.end(), [](const auto &symbol) {
+        return symbol->name() == VERSION_SYMBOL;
+    });
+
+    if (symbolIterator == symbolTable.end())
+        return std::nullopt;
+
+    std::unique_ptr<elf::IHeader> header = mReader.header();
+
+    size_t ptrSize = header->ident()[EI_CLASS] == ELFCLASS64 ? 8 : 4;
+    bool bigEndian = header->ident()[EI_DATA] == ELFDATA2MSB;
+
+    auto read = [=](const std::byte *ptr) -> uint64_t {
+        if (ptrSize == 4)
+            return bigEndian ? be32toh(*(uint32_t *) ptr) : le32toh(*(uint32_t *) ptr);
+
+        return bigEndian ? be64toh(*(uint64_t *) ptr) : le64toh(*(uint64_t *) ptr);
+    };
+
+    std::optional<std::vector<std::byte>> buffer = mReader.readVirtualMemory(symbolIterator.operator*()->value(), ptrSize * 2);
+
+    if (!buffer)
+        return std::nullopt;
+
+    buffer = mReader.readVirtualMemory(read(buffer->data()), read(buffer->data() + ptrSize));
+
+    if (!buffer)
+        return std::nullopt;
+
+    return Version({(char *) buffer->data(), buffer->size()});
 }
 
 std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {

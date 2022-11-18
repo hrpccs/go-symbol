@@ -16,6 +16,9 @@ namespace go::symbol {
         bool load(const std::string &path);
 
     public:
+        std::optional<Version> version();
+
+    public:
         std::optional<BuildInfo> buildInfo();
         std::optional<SymbolTable> symbols(AccessMethod method, uint64_t base = 0);
 
