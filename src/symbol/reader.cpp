@@ -21,12 +21,12 @@ constexpr auto SYMBOL_MAGIC_118 = 0xfffffff0;
 constexpr auto SYMBOL_MAGIC_120 = 0xfffffff1;
 
 bool go::symbol::Reader::load(const std::string &path) {
-    if (!mReader.load(path)) {
+    if (!elf::Reader::load(path)) {
         LOG_ERROR("load elf failed: %s", path.c_str());
         return false;
     }
 
-    std::vector<std::shared_ptr<elf::ISection>> sections = mReader.sections();
+    std::vector<std::shared_ptr<elf::ISection>> sections = this->sections();
 
     auto it = std::find_if(
             sections.begin(),
@@ -50,7 +50,7 @@ std::optional<go::symbol::Version> go::symbol::Reader::version() {
     if (buildInfo)
         return buildInfo->version();
 
-    std::vector<std::shared_ptr<elf::ISection>> sections = mReader.sections();
+    std::vector<std::shared_ptr<elf::ISection>> sections = this->sections();
 
     auto it = std::find_if(sections.begin(), sections.end(), [](const auto &section) {
         return section->type() == SHT_SYMTAB;
@@ -59,7 +59,7 @@ std::optional<go::symbol::Version> go::symbol::Reader::version() {
     if (it == sections.end())
         return std::nullopt;
 
-    elf::SymbolTable symbolTable(mReader, *it);
+    elf::SymbolTable symbolTable(*this, *it);
 
     auto symbolIterator = std::find_if(symbolTable.begin(), symbolTable.end(), [](const auto &symbol) {
         return symbol->name() == VERSION_SYMBOL;
@@ -68,7 +68,7 @@ std::optional<go::symbol::Version> go::symbol::Reader::version() {
     if (symbolIterator == symbolTable.end())
         return std::nullopt;
 
-    std::unique_ptr<elf::IHeader> header = mReader.header();
+    std::unique_ptr<elf::IHeader> header = this->header();
 
     size_t ptrSize = header->ident()[EI_CLASS] == ELFCLASS64 ? 8 : 4;
     bool bigEndian = header->ident()[EI_DATA] == ELFDATA2MSB;
@@ -80,12 +80,12 @@ std::optional<go::symbol::Version> go::symbol::Reader::version() {
         return bigEndian ? be64toh(*(uint64_t *) ptr) : le64toh(*(uint64_t *) ptr);
     };
 
-    std::optional<std::vector<std::byte>> buffer = mReader.readVirtualMemory(symbolIterator.operator*()->value(), ptrSize * 2);
+    std::optional<std::vector<std::byte>> buffer = readVirtualMemory(symbolIterator.operator*()->value(), ptrSize * 2);
 
     if (!buffer)
         return std::nullopt;
 
-    buffer = mReader.readVirtualMemory(read(buffer->data()), read(buffer->data() + ptrSize));
+    buffer = readVirtualMemory(read(buffer->data()), read(buffer->data() + ptrSize));
 
     if (!buffer)
         return std::nullopt;
@@ -94,7 +94,7 @@ std::optional<go::symbol::Version> go::symbol::Reader::version() {
 }
 
 std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {
-    std::vector<std::shared_ptr<elf::ISection>> sections = mReader.sections();
+    std::vector<std::shared_ptr<elf::ISection>> sections = this->sections();
 
     auto it = std::find_if(
             sections.begin(),
@@ -114,11 +114,11 @@ std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {
         return std::nullopt;
     }
 
-    return BuildInfo(mReader, *it);
+    return BuildInfo(*this, *it);
 }
 
 std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(AccessMethod method, uint64_t base) {
-    std::vector<std::shared_ptr<elf::ISection>> sections = mReader.sections();
+    std::vector<std::shared_ptr<elf::ISection>> sections = this->sections();
 
     auto it = std::find_if(
             sections.begin(),
@@ -161,10 +161,10 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(AccessMethod 
             return std::nullopt;
     }
 
-    bool dynamic = mReader.header()->type() == ET_DYN;
+    bool dynamic = header()->type() == ET_DYN;
 
     std::vector<std::shared_ptr<elf::ISegment>> loads;
-    std::vector<std::shared_ptr<elf::ISegment>> segments = mReader.segments();
+    std::vector<std::shared_ptr<elf::ISegment>> segments = this->segments();
 
     std::copy_if(
             segments.begin(),

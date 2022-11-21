@@ -11,7 +11,7 @@ namespace go::symbol {
         Attached
     };
 
-    class Reader {
+    class Reader : public elf::Reader {
     public:
         bool load(const std::string &path);
 
@@ -21,9 +21,6 @@ namespace go::symbol {
     public:
         std::optional<BuildInfo> buildInfo();
         std::optional<SymbolTable> symbols(AccessMethod method, uint64_t base = 0);
-
-    private:
-        elf::Reader mReader;
     };
 }
 
