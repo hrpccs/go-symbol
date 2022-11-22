@@ -13,9 +13,6 @@ namespace go::symbol {
 
     class Reader : public elf::Reader {
     public:
-        bool load(const std::string &path);
-
-    public:
         std::optional<Version> version();
 
     public:

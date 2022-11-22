@@ -20,30 +20,6 @@ constexpr auto SYMBOL_MAGIC_116 = 0xfffffffa;
 constexpr auto SYMBOL_MAGIC_118 = 0xfffffff0;
 constexpr auto SYMBOL_MAGIC_120 = 0xfffffff1;
 
-bool go::symbol::Reader::load(const std::string &path) {
-    if (!elf::Reader::load(path)) {
-        LOG_ERROR("load elf failed: %s", path.c_str());
-        return false;
-    }
-
-    std::vector<std::shared_ptr<elf::ISection>> sections = this->sections();
-
-    auto it = std::find_if(
-            sections.begin(),
-            sections.end(),
-            [](const auto &section) {
-                return zero::strings::containsIC(section->name(), SYMBOL_SECTION);
-            }
-    );
-
-    if (it == sections.end()) {
-        LOG_ERROR("symbol section not found");
-        return false;
-    }
-
-    return true;
-}
-
 std::optional<go::symbol::Version> go::symbol::Reader::version() {
     std::optional<go::symbol::BuildInfo> buildInfo = this->buildInfo();
 
