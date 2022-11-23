@@ -18,17 +18,19 @@ namespace go::symbol {
         std::list<Module> deps;
     };
 
-    class Version {
-    public:
-        explicit Version(std::string_view version);
+    struct Version {
+        int major;
+        int minor;
 
-    public:
-        [[nodiscard]] std::string string() const;
-        [[nodiscard]] std::optional<std::tuple<int, int>> number() const;
-
-    private:
-        std::string mVersion;
+        bool operator==(const Version &rhs) const;
+        bool operator!=(const Version &rhs) const;
+        bool operator<(const Version &rhs) const;
+        bool operator>(const Version &rhs) const;
+        bool operator<=(const Version &rhs) const;
+        bool operator>=(const Version &rhs) const;
     };
+
+    std::optional<Version> parseVersion(std::string_view str);
 
     class BuildInfo {
     public:

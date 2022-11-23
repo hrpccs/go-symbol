@@ -11,18 +11,34 @@ constexpr auto BUILD_INFO_MAGIC_SIZE = 14;
 constexpr auto POINTER_FREE_OFFSET = 32;
 constexpr auto POINTER_FREE_FLAG = std::byte{0x2};
 
-go::symbol::Version::Version(std::string_view version) : mVersion(version) {
-
+bool go::symbol::Version::operator==(const Version &rhs) const {
+    return major == rhs.major && minor == rhs.minor;
 }
 
-std::string go::symbol::Version::string() const {
-    return mVersion;
+bool go::symbol::Version::operator!=(const Version &rhs) const {
+    return !operator==(rhs);
 }
 
-std::optional<std::tuple<int, int>> go::symbol::Version::number() const {
-    std::smatch match;
+bool go::symbol::Version::operator<(const Version &rhs) const {
+    return major < rhs.major || (major == rhs.major && minor < rhs.minor);
+}
 
-    if (!std::regex_match(mVersion, match, std::regex(R"(^go(\d+)\.(\d+).*)")))
+bool go::symbol::Version::operator>(const go::symbol::Version &rhs) const {
+    return major > rhs.major || (major == rhs.major && minor > rhs.minor);
+}
+
+bool go::symbol::Version::operator<=(const go::symbol::Version &rhs) const {
+    return !operator>(rhs);
+}
+
+bool go::symbol::Version::operator>=(const go::symbol::Version &rhs) const {
+    return !operator<(rhs);
+}
+
+std::optional<go::symbol::Version> go::symbol::parseVersion(std::string_view str) {
+    std::match_results<std::string_view::const_iterator> match;
+
+    if (!std::regex_match(str.begin(), str.end(), match, std::regex(R"(^go(\d+)\.(\d+).*)")))
         return std::nullopt;
 
     std::optional<int> major = zero::strings::toNumber<int>(match.str(1));
@@ -31,7 +47,7 @@ std::optional<std::tuple<int, int>> go::symbol::Version::number() const {
     if (!major || !minor)
         return std::nullopt;
 
-    return std::tuple<int, int>{*major, *minor};
+    return Version{*major, *minor};
 }
 
 go::symbol::BuildInfo::BuildInfo(elf::Reader reader, std::shared_ptr<elf::ISection> section) : mReader(std::move(reader)), mSection(std::move(section)) {
@@ -49,7 +65,7 @@ std::optional<go::symbol::Version> go::symbol::BuildInfo::version() {
         if (!str)
             return std::nullopt;
 
-        return Version(*str);
+        return parseVersion(*str);
     }
 
     std::optional<std::pair<uint64_t, int>> result = binary::uVarInt(buffer + POINTER_FREE_OFFSET);
@@ -57,7 +73,7 @@ std::optional<go::symbol::Version> go::symbol::BuildInfo::version() {
     if (!result)
         return std::nullopt;
 
-    return Version({(char *) buffer + POINTER_FREE_OFFSET + result->second, result->first});
+    return parseVersion({(char *) buffer + POINTER_FREE_OFFSET + result->second, result->first});
 }
 
 std::optional<go::symbol::ModuleInfo> go::symbol::BuildInfo::moduleInfo() {

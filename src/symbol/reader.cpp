@@ -66,7 +66,7 @@ std::optional<go::symbol::Version> go::symbol::Reader::version() {
     if (!buffer)
         return std::nullopt;
 
-    return Version({(char *) buffer->data(), buffer->size()});
+    return parseVersion({(char *) buffer->data(), buffer->size()});
 }
 
 std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {
