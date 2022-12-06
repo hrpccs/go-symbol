@@ -19,7 +19,7 @@ FetchContent_MakeAvailable(zero)
 FetchContent_Declare(
         elf
         GIT_REPOSITORY https://github.com/Hackerl/elf
-        GIT_TAG f785d01d27d1d72882be23862f5bdda363903aeb
+        GIT_TAG 7c953ef6216ddb56823bcc290c7a3e7d1aee65e4
 )
 
 FetchContent_MakeAvailable(elf)
@@ -33,4 +33,4 @@ add_library(
 )
 
 target_include_directories(go_symbol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(go_symbol zero elf)
+target_link_libraries(go_symbol zero elf_cpp)
