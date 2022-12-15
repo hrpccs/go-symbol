@@ -76,7 +76,7 @@ std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {
             sections.begin(),
             sections.end(),
             [](const auto &section) {
-                return zero::strings::containsIC(section->name(), BUILD_INFO_SECTION);
+                return section->name().find(BUILD_INFO_SECTION) != std::string::npos;
             }
     );
 
@@ -100,7 +100,7 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(AccessMethod 
             sections.begin(),
             sections.end(),
             [](const auto &section) {
-                return zero::strings::containsIC(section->name(), SYMBOL_SECTION);
+                return section->name().find(SYMBOL_SECTION) != std::string::npos;
             }
     );
 
