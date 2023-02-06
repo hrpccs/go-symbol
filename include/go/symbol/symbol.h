@@ -3,6 +3,7 @@
 
 #include <variant>
 #include <elf/reader.h>
+#include <go/endian.h>
 
 namespace go::symbol {
     enum SymbolVersion {
@@ -18,7 +19,7 @@ namespace go::symbol {
     class SymbolTable {
         using MemoryBuffer = std::variant<std::shared_ptr<elf::ISection>, std::unique_ptr<std::byte[]>, const std::byte *>;
     public:
-        SymbolTable(SymbolVersion version, bool bigEndian, MemoryBuffer memoryBuffer, uint64_t base);
+        SymbolTable(SymbolVersion version, endian::Converter converter, MemoryBuffer memoryBuffer, uint64_t base);
 
     public:
         SymbolIterator find(uint64_t address);
@@ -35,15 +36,10 @@ namespace go::symbol {
         const std::byte *data();
 
     private:
-        [[nodiscard]] uint32_t convert(uint32_t bits) const;
-        [[nodiscard]] uint64_t convert(uint64_t bits) const;
-        [[nodiscard]] uint64_t peek(const std::byte *ptr) const;
-
-    private:
-        bool mBigEndian;
         uint64_t mBase;
         SymbolVersion mVersion;
         MemoryBuffer mMemoryBuffer;
+        endian::Converter mConverter;
 
     private:
         uint32_t mQuantum{};
@@ -132,7 +128,7 @@ namespace go::symbol {
         std::ptrdiff_t operator-(const SymbolIterator &rhs);
 
     private:
-        std::ptrdiff_t mSize;
+        size_t mSize;
         const std::byte *mBuffer;
         const SymbolTable *mTable;
     };

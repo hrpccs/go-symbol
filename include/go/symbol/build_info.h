@@ -1,8 +1,9 @@
 #ifndef GO_SYMBOL_BUILD_INFO_H
 #define GO_SYMBOL_BUILD_INFO_H
 
-#include <elf/reader.h>
 #include <list>
+#include <elf/reader.h>
+#include <go/version.h>
 
 namespace go::symbol {
     struct Module {
@@ -18,20 +19,6 @@ namespace go::symbol {
         std::list<Module> deps;
     };
 
-    struct Version {
-        int major;
-        int minor;
-
-        bool operator==(const Version &rhs) const;
-        bool operator!=(const Version &rhs) const;
-        bool operator<(const Version &rhs) const;
-        bool operator>(const Version &rhs) const;
-        bool operator<=(const Version &rhs) const;
-        bool operator>=(const Version &rhs) const;
-    };
-
-    std::optional<Version> parseVersion(std::string_view str);
-
     class BuildInfo {
     public:
         BuildInfo(elf::Reader reader, std::shared_ptr<elf::ISection> section);
@@ -45,8 +32,8 @@ namespace go::symbol {
 
     private:
         size_t mPtrSize;
-        bool mBigEndian;
         bool mPointerFree;
+        elf::endian::Type mEndian;
 
     private:
         elf::Reader mReader;

@@ -1,66 +1,28 @@
 #include <go/symbol/build_info.h>
-#include <go/binary/binary.h>
+#include <go/binary.h>
+#include <go/endian.h>
 #include <zero/log.h>
 #include <algorithm>
 #include <cstddef>
-#include <regex>
 
-constexpr auto BUILD_INFO_OFFSET = 16;
-constexpr auto BUILD_INFO_MAGIC_SIZE = 14;
+constexpr auto MAGIC_SIZE = 14;
+constexpr auto INFO_OFFSET = 16;
 
 constexpr auto POINTER_FREE_OFFSET = 32;
 constexpr auto POINTER_FREE_FLAG = std::byte{0x2};
 
-bool go::symbol::Version::operator==(const Version &rhs) const {
-    return major == rhs.major && minor == rhs.minor;
+go::symbol::BuildInfo::BuildInfo(elf::Reader reader, std::shared_ptr<elf::ISection> section)
+        : mReader(std::move(reader)), mSection(std::move(section)) {
+    mPtrSize = std::to_integer<size_t>(mSection->data()[MAGIC_SIZE]);
+    mEndian = std::to_integer<bool>(mSection->data()[MAGIC_SIZE + 1]) ? elf::endian::Big : elf::endian::Little;
+    mPointerFree = std::to_integer<bool>(mSection->data()[MAGIC_SIZE + 1] & POINTER_FREE_FLAG);
 }
 
-bool go::symbol::Version::operator!=(const Version &rhs) const {
-    return !operator==(rhs);
-}
-
-bool go::symbol::Version::operator<(const Version &rhs) const {
-    return major < rhs.major || (major == rhs.major && minor < rhs.minor);
-}
-
-bool go::symbol::Version::operator>(const go::symbol::Version &rhs) const {
-    return major > rhs.major || (major == rhs.major && minor > rhs.minor);
-}
-
-bool go::symbol::Version::operator<=(const go::symbol::Version &rhs) const {
-    return !operator>(rhs);
-}
-
-bool go::symbol::Version::operator>=(const go::symbol::Version &rhs) const {
-    return !operator<(rhs);
-}
-
-std::optional<go::symbol::Version> go::symbol::parseVersion(std::string_view str) {
-    std::match_results<std::string_view::const_iterator> match;
-
-    if (!std::regex_match(str.begin(), str.end(), match, std::regex(R"(^go(\d+)\.(\d+).*)")))
-        return std::nullopt;
-
-    std::optional<int> major = zero::strings::toNumber<int>(match.str(1));
-    std::optional<int> minor = zero::strings::toNumber<int>(match.str(2));
-
-    if (!major || !minor)
-        return std::nullopt;
-
-    return Version{*major, *minor};
-}
-
-go::symbol::BuildInfo::BuildInfo(elf::Reader reader, std::shared_ptr<elf::ISection> section) : mReader(std::move(reader)), mSection(std::move(section)) {
-    mPtrSize = std::to_integer<size_t>(mSection->data()[BUILD_INFO_MAGIC_SIZE]);
-    mBigEndian = std::to_integer<bool>(mSection->data()[BUILD_INFO_MAGIC_SIZE + 1]);
-    mPointerFree = std::to_integer<bool>(mSection->data()[BUILD_INFO_MAGIC_SIZE + 1] & POINTER_FREE_FLAG);
-}
-
-std::optional<go::symbol::Version> go::symbol::BuildInfo::version() {
+std::optional<go::Version> go::symbol::BuildInfo::version() {
     const std::byte *buffer = mSection->data();
 
     if (!mPointerFree) {
-        std::optional<std::string> str = readString(buffer + BUILD_INFO_OFFSET);
+        std::optional<std::string> str = readString(buffer + INFO_OFFSET);
 
         if (!str)
             return std::nullopt;
@@ -81,7 +43,7 @@ std::optional<go::symbol::ModuleInfo> go::symbol::BuildInfo::moduleInfo() {
     std::string modInfo;
 
     if (!mPointerFree) {
-        std::optional<std::string> str = readString(buffer + BUILD_INFO_OFFSET + mPtrSize);
+        std::optional<std::string> str = readString(buffer + INFO_OFFSET + mPtrSize);
 
         if (!str)
             return std::nullopt;
@@ -100,7 +62,7 @@ std::optional<go::symbol::ModuleInfo> go::symbol::BuildInfo::moduleInfo() {
         if (!result)
             return std::nullopt;
 
-        modInfo = {(char *)ptr + result->second, result->first};
+        modInfo = {(char *) ptr + result->second, result->first};
     }
 
     if (modInfo.length() < 32) {
@@ -155,19 +117,16 @@ std::optional<go::symbol::ModuleInfo> go::symbol::BuildInfo::moduleInfo() {
 }
 
 std::optional<std::string> go::symbol::BuildInfo::readString(const std::byte *data) {
-    auto read = [=](const std::byte *ptr) -> uint64_t {
-        if (mPtrSize == 4)
-            return mBigEndian ? be32toh(*(uint32_t *) ptr) : le32toh(*(uint32_t *) ptr);
-
-        return mBigEndian ? be64toh(*(uint64_t *) ptr) : le64toh(*(uint64_t *) ptr);
-    };
-
-    std::optional<std::vector<std::byte>> buffer = mReader.readVirtualMemory(read(data), mPtrSize * 2);
+    endian::Converter converter(mEndian);
+    std::optional<std::vector<std::byte>> buffer = mReader.readVirtualMemory(converter(data, mPtrSize), mPtrSize * 2);
 
     if (!buffer)
         return std::nullopt;
 
-    buffer = mReader.readVirtualMemory(read(buffer->data()), read(buffer->data() + mPtrSize));
+    buffer = mReader.readVirtualMemory(
+            converter(buffer->data(), mPtrSize),
+            converter(buffer->data() + mPtrSize, mPtrSize)
+    );
 
     if (!buffer)
         return std::nullopt;

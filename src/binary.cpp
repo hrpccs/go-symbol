@@ -1,4 +1,4 @@
-#include <go/binary/binary.h>
+#include <go/binary.h>
 
 constexpr auto MAX_VAR_INT_LENGTH = 10;
 

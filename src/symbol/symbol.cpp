@@ -1,5 +1,5 @@
 #include <go/symbol/symbol.h>
-#include <go/binary/binary.h>
+#include <go/binary.h>
 #include <algorithm>
 #include <cstring>
 
@@ -14,8 +14,12 @@ constexpr auto STACK_TOP_FUNCTION = {
         "runtime.goexit"
 };
 
-go::symbol::SymbolTable::SymbolTable(SymbolVersion version, bool bigEndian, MemoryBuffer memoryBuffer, uint64_t base)
-        : mVersion(version), mBigEndian(bigEndian), mMemoryBuffer(std::move(memoryBuffer)), mBase(base) {
+go::symbol::SymbolTable::SymbolTable(
+        SymbolVersion version,
+        endian::Converter converter,
+        MemoryBuffer memoryBuffer,
+        uint64_t base
+) : mVersion(version), mConverter(converter), mMemoryBuffer(std::move(memoryBuffer)), mBase(base) {
     const std::byte *buffer = data();
 
     mQuantum = std::to_integer<uint32_t>(buffer[6]);
@@ -23,48 +27,48 @@ go::symbol::SymbolTable::SymbolTable(SymbolVersion version, bool bigEndian, Memo
 
     switch (mVersion) {
         case VERSION12: {
-            mFuncNum = peek(buffer + 8);
+            mFuncNum = mConverter(buffer + 8, mPtrSize);
             mFuncData = buffer;
             mFuncNameTable = buffer;
             mFuncTable = buffer + 8 + mPtrSize;
             mPCTable = buffer;
 
             uint32_t funcTableSize = mFuncNum * 2 * mPtrSize + mPtrSize;
-            uint32_t fileOffset = convert(*(uint32_t *) (mFuncTable + funcTableSize));
+            uint32_t fileOffset = mConverter(*(uint32_t *) (mFuncTable + funcTableSize));
 
             mFileTable = buffer + fileOffset;
-            mFileNum = convert(*(uint32_t *) mFileTable);
+            mFileNum = mConverter(*(uint32_t *) mFileTable);
 
             break;
         }
 
         case VERSION116: {
-            mFuncNum = peek(buffer + 8);
-            mFileNum = peek(buffer + 8 + mPtrSize);
+            mFuncNum = mConverter(buffer + 8, mPtrSize);
+            mFileNum = mConverter(buffer + 8 + mPtrSize, mPtrSize);
 
-            mFuncNameTable = buffer + peek(buffer + 8 + 2 * mPtrSize);
-            mCuTable = buffer + peek(buffer + 8 + 3 * mPtrSize);
-            mFileTable = buffer + peek(buffer + 8 + 4 * mPtrSize);
-            mPCTable = buffer + peek(buffer + 8 + 5 * mPtrSize);
-            mFuncData = buffer + peek(buffer + 8 + 6 * mPtrSize);
-            mFuncTable = buffer + peek(buffer + 8 + 6 * mPtrSize);
+            mFuncNameTable = buffer + mConverter(buffer + 8 + 2 * mPtrSize, mPtrSize);
+            mCuTable = buffer + mConverter(buffer + 8 + 3 * mPtrSize, mPtrSize);
+            mFileTable = buffer + mConverter(buffer + 8 + 4 * mPtrSize, mPtrSize);
+            mPCTable = buffer + mConverter(buffer + 8 + 5 * mPtrSize, mPtrSize);
+            mFuncData = buffer + mConverter(buffer + 8 + 6 * mPtrSize, mPtrSize);
+            mFuncTable = buffer + mConverter(buffer + 8 + 6 * mPtrSize, mPtrSize);
 
             break;
         }
 
         case VERSION118:
         case VERSION120: {
-            mFuncNum = peek(buffer + 8);
-            mFileNum = peek(buffer + 8 + mPtrSize);
+            mFuncNum = mConverter(buffer + 8, mPtrSize);
+            mFileNum = mConverter(buffer + 8 + mPtrSize, mPtrSize);
 
-            mBase += peek(buffer + 8 + 2 * mPtrSize);
+            mBase += mConverter(buffer + 8 + 2 * mPtrSize, mPtrSize);
 
-            mFuncNameTable = buffer + peek(buffer + 8 + 3 * mPtrSize);
-            mCuTable = buffer + peek(buffer + 8 + 4 * mPtrSize);
-            mFileTable = buffer + peek(buffer + 8 + 5 * mPtrSize);
-            mPCTable = buffer + peek(buffer + 8 + 6 * mPtrSize);
-            mFuncData = buffer + peek(buffer + 8 + 7 * mPtrSize);
-            mFuncTable = buffer + peek(buffer + 8 + 7 * mPtrSize);
+            mFuncNameTable = buffer + mConverter(buffer + 8 + 3 * mPtrSize, mPtrSize);
+            mCuTable = buffer + mConverter(buffer + 8 + 4 * mPtrSize, mPtrSize);
+            mFileTable = buffer + mConverter(buffer + 8 + 5 * mPtrSize, mPtrSize);
+            mPCTable = buffer + mConverter(buffer + 8 + 6 * mPtrSize, mPtrSize);
+            mFuncData = buffer + mConverter(buffer + 8 + 7 * mPtrSize, mPtrSize);
+            mFuncTable = buffer + mConverter(buffer + 8 + 7 * mPtrSize, mPtrSize);
 
             break;
         }
@@ -110,30 +114,16 @@ const std::byte *go::symbol::SymbolTable::data() {
     return std::get<const std::byte *>(mMemoryBuffer);
 }
 
-uint32_t go::symbol::SymbolTable::convert(uint32_t bits) const {
-    return mBigEndian ? be32toh(bits) : le32toh(bits);
-}
-
-uint64_t go::symbol::SymbolTable::convert(uint64_t bits) const {
-    return mBigEndian ? be64toh(bits) : le64toh(bits);
-}
-
-uint64_t go::symbol::SymbolTable::peek(const std::byte *ptr) const {
-    if (mPtrSize == 4)
-        return convert(*(uint32_t *) ptr);
-
-    return convert(*(uint64_t *) ptr);
-}
-
-go::symbol::Symbol::Symbol(const go::symbol::SymbolTable *table, const std::byte *buffer) : mTable(table), mBuffer(buffer) {
+go::symbol::Symbol::Symbol(const go::symbol::SymbolTable *table, const std::byte *buffer)
+        : mTable(table), mBuffer(buffer) {
 
 }
 
 uint64_t go::symbol::Symbol::entry() const {
     if (mTable->mVersion < VERSION118)
-        return mTable->mBase + mTable->peek(mBuffer);
+        return mTable->mBase + mTable->mConverter(mBuffer, mTable->mPtrSize);
 
-    return mTable->mBase + mTable->convert(*(uint32_t *) mBuffer);
+    return mTable->mBase + mTable->mConverter(*(uint32_t *) mBuffer);
 }
 
 const char *go::symbol::Symbol::name() const {
@@ -189,7 +179,9 @@ bool go::symbol::Symbol::isStackTop() const {
 }
 
 uint32_t go::symbol::Symbol::field(int n) const {
-    return mTable->convert(*(uint32_t *) (mBuffer + (mTable->mVersion >= VERSION118 ? 4 : mTable->mPtrSize) + (n - 1) * 4));
+    return mTable->mConverter(
+            *(uint32_t *) (mBuffer + (mTable->mVersion >= VERSION118 ? 4 : mTable->mPtrSize) + (n - 1) * 4)
+    );
 }
 
 int go::symbol::Symbol::value(uint32_t offset, uint64_t entry, uint64_t target) const {
@@ -225,7 +217,8 @@ int go::symbol::Symbol::value(uint32_t offset, uint64_t entry, uint64_t target) 
     return value;
 }
 
-go::symbol::SymbolEntry::SymbolEntry(const go::symbol::SymbolTable *table, uint64_t entry, uint64_t offset) : mTable(table), mEntry(entry), mOffset(offset) {
+go::symbol::SymbolEntry::SymbolEntry(const go::symbol::SymbolTable *table, uint64_t entry, uint64_t offset)
+        : mTable(table), mEntry(entry), mOffset(offset) {
 
 }
 
@@ -237,19 +230,17 @@ go::symbol::Symbol go::symbol::SymbolEntry::symbol() const {
     return {mTable, mTable->mFuncData + mOffset};
 }
 
-go::symbol::SymbolIterator::SymbolIterator(const go::symbol::SymbolTable *table, const std::byte *buffer) : mTable(table), mBuffer(buffer), mSize(table->mVersion >= VERSION118 ? 4 : table->mPtrSize) {
+go::symbol::SymbolIterator::SymbolIterator(const go::symbol::SymbolTable *table, const std::byte *buffer)
+        : mTable(table), mBuffer(buffer), mSize(table->mVersion >= VERSION118 ? 4 : table->mPtrSize) {
 
 }
 
 go::symbol::SymbolEntry go::symbol::SymbolIterator::operator*() {
-    auto peek = [=](const std::byte *address) -> uint64_t {
-        if (mSize == 4)
-            return mTable->convert(*(uint32_t *) address);
-
-        return mTable->convert(*(uint64_t *) address);
+    return {
+            mTable,
+            mTable->mBase + mTable->mConverter(mBuffer, mSize),
+            mTable->mConverter(mBuffer + mSize, mSize)
     };
-
-    return {mTable, mTable->mBase + peek(mBuffer), peek(mBuffer + mSize)};
 }
 
 go::symbol::SymbolIterator &go::symbol::SymbolIterator::operator--() {
@@ -284,5 +275,5 @@ bool go::symbol::SymbolIterator::operator!=(const go::symbol::SymbolIterator &rh
 }
 
 std::ptrdiff_t go::symbol::SymbolIterator::operator-(const go::symbol::SymbolIterator &rhs) {
-    return (mBuffer - rhs.mBuffer) / (2 * mSize);
+    return (mBuffer - rhs.mBuffer) / std::ptrdiff_t(2 * mSize);
 }

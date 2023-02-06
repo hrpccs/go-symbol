@@ -2,6 +2,7 @@
 #define GO_SYMBOL_READER_H
 
 #include "symbol.h"
+#include "interface.h"
 #include "build_info.h"
 
 namespace go::symbol {
@@ -12,12 +13,17 @@ namespace go::symbol {
     };
 
     class Reader : public elf::Reader {
+    private:
+        size_t ptrSize();
+        elf::endian::Type endian();
+
     public:
         std::optional<Version> version();
 
     public:
         std::optional<BuildInfo> buildInfo();
         std::optional<SymbolTable> symbols(AccessMethod method, uint64_t base = 0);
+        std::optional<InterfaceTable> interfaces(uint64_t base = 0);
     };
 }
 
