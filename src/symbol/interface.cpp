@@ -14,16 +14,20 @@ go::symbol::InterfaceTable::InterfaceTable(
 
 }
 
-go::symbol::Interface go::symbol::InterfaceTable::operator[](size_t index) {
+size_t go::symbol::InterfaceTable::size() const {
+    return mSection->size() / mPtrSize;
+}
+
+go::symbol::Interface go::symbol::InterfaceTable::operator[](size_t index) const {
     return *(begin() + std::ptrdiff_t(index));
 }
 
-go::symbol::InterfaceIterator go::symbol::InterfaceTable::begin() {
+go::symbol::InterfaceIterator go::symbol::InterfaceTable::begin() const {
     return {this, mSection->data()};
 }
 
-go::symbol::InterfaceIterator go::symbol::InterfaceTable::end() {
-    return begin() + std::ptrdiff_t(mSection->size() / mPtrSize);
+go::symbol::InterfaceIterator go::symbol::InterfaceTable::end() const {
+    return begin() + std::ptrdiff_t(size());
 }
 
 go::symbol::InterfaceIterator::InterfaceIterator(const go::symbol::InterfaceTable *table, const std::byte *buffer)

@@ -22,11 +22,14 @@ namespace go::symbol {
         );
 
     public:
-        Interface operator[](size_t index);
+        [[nodiscard]] size_t size() const;
 
     public:
-        InterfaceIterator begin();
-        InterfaceIterator end();
+        [[nodiscard]] Interface operator[](size_t index) const;
+
+    public:
+        [[nodiscard]] InterfaceIterator begin() const;
+        [[nodiscard]] InterfaceIterator end() const;
 
     private:
         uint64_t mBase;

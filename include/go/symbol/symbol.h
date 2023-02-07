@@ -22,18 +22,21 @@ namespace go::symbol {
         SymbolTable(SymbolVersion version, endian::Converter converter, MemoryBuffer memoryBuffer, uint64_t base);
 
     public:
-        SymbolIterator find(uint64_t address);
-        SymbolIterator find(std::string_view name);
+        [[nodiscard]] SymbolIterator find(uint64_t address) const;
+        [[nodiscard]] SymbolIterator find(std::string_view name) const;
 
     public:
-        SymbolEntry operator[](size_t index);
+        [[nodiscard]] size_t size() const;
 
     public:
-        SymbolIterator begin();
-        SymbolIterator end();
+        [[nodiscard]] SymbolEntry operator[](size_t index) const;
+
+    public:
+        [[nodiscard]] SymbolIterator begin() const;
+        [[nodiscard]] SymbolIterator end() const;
 
     private:
-        const std::byte *data();
+        [[nodiscard]] const std::byte *data() const;
 
     private:
         uint64_t mBase;

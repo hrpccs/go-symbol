@@ -75,7 +75,7 @@ go::symbol::SymbolTable::SymbolTable(
     }
 }
 
-go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) {
+go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) const {
     if (address < operator[](0).entry() || address >= operator[](mFuncNum).entry())
         return end();
 
@@ -84,25 +84,29 @@ go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) {
     }) - 1;
 }
 
-go::symbol::SymbolIterator go::symbol::SymbolTable::find(std::string_view name) {
+go::symbol::SymbolIterator go::symbol::SymbolTable::find(std::string_view name) const {
     return std::find_if(begin(), end(), [=](const auto &entry) {
         return name == entry.symbol().name();
     });
 }
 
-go::symbol::SymbolEntry go::symbol::SymbolTable::operator[](size_t index) {
+size_t go::symbol::SymbolTable::size() const {
+    return mFuncNum;
+}
+
+go::symbol::SymbolEntry go::symbol::SymbolTable::operator[](size_t index) const {
     return *(begin() + std::ptrdiff_t(index));
 }
 
-go::symbol::SymbolIterator go::symbol::SymbolTable::begin() {
+go::symbol::SymbolIterator go::symbol::SymbolTable::begin() const {
     return {this, mFuncTable};
 }
 
-go::symbol::SymbolIterator go::symbol::SymbolTable::end() {
+go::symbol::SymbolIterator go::symbol::SymbolTable::end() const {
     return begin() + mFuncNum;
 }
 
-const std::byte *go::symbol::SymbolTable::data() {
+const std::byte *go::symbol::SymbolTable::data() const {
     size_t index = mMemoryBuffer.index();
 
     if (index == 0) {
