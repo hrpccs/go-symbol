@@ -19,7 +19,17 @@ namespace go::symbol {
     class SymbolTable {
         using MemoryBuffer = std::variant<std::shared_ptr<elf::ISection>, std::unique_ptr<std::byte[]>, const std::byte *>;
     public:
-        SymbolTable(SymbolVersion version, endian::Converter converter, MemoryBuffer memoryBuffer, uint64_t base);
+        SymbolTable(
+                SymbolVersion
+                version,
+                endian::Converter converter,
+                int fd,
+                off64_t offset,
+                uint64_t address,
+                uint64_t base
+        );
+
+        ~SymbolTable();
 
     public:
         [[nodiscard]] SymbolIterator find(uint64_t address) const;
@@ -36,13 +46,13 @@ namespace go::symbol {
         [[nodiscard]] SymbolIterator end() const;
 
     private:
-        [[nodiscard]] const std::byte *data() const;
-
-    private:
+        int mFD;
         uint64_t mBase;
+        off64_t mOffset;
+        uint64_t mAddress;
         SymbolVersion mVersion;
-        MemoryBuffer mMemoryBuffer;
         endian::Converter mConverter;
+        std::unique_ptr<std::byte[]> mFuncTableBuffer;
 
     private:
         uint32_t mQuantum{};
@@ -51,12 +61,12 @@ namespace go::symbol {
         uint32_t mFileNum{};
 
     private:
-        const std::byte *mFuncNameTable{};
-        const std::byte *mCuTable{};
-        const std::byte *mFuncTable{};
-        const std::byte *mFuncData{};
-        const std::byte *mPCTable{};
-        const std::byte *mFileTable{};
+        uint64_t mFuncNameTable{};
+        uint64_t mCuTable{};
+        uint64_t mFuncTable{};
+        uint64_t mFuncData{};
+        uint64_t mPCTable{};
+        uint64_t mFileTable{};
 
         friend class Symbol;
         friend class SymbolEntry;
@@ -65,16 +75,16 @@ namespace go::symbol {
 
     class Symbol {
     public:
-        Symbol(const SymbolTable *table, const std::byte *buffer);
+        Symbol(const SymbolTable *table, uint64_t address);
 
     public:
         [[nodiscard]] uint64_t entry() const;
-        [[nodiscard]] const char *name() const;
+        [[nodiscard]] std::string name() const;
 
     public:
         [[nodiscard]] int frameSize(uint64_t pc) const;
         [[nodiscard]] int sourceLine(uint64_t pc) const;
-        [[nodiscard]] const char *sourceFile(uint64_t pc) const;
+        [[nodiscard]] std::string sourceFile(uint64_t pc) const;
 
     public:
         [[nodiscard]] bool isStackTop() const;
@@ -86,7 +96,7 @@ namespace go::symbol {
         [[nodiscard]] int value(uint32_t offset, uint64_t entry, uint64_t target) const;
 
     private:
-        const std::byte *mBuffer;
+        uint64_t mAddress;
         const SymbolTable *mTable;
     };
 

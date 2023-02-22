@@ -19,7 +19,7 @@ FetchContent_MakeAvailable(zero)
 FetchContent_Declare(
         elf
         GIT_REPOSITORY https://github.com/Hackerl/elf
-        GIT_TAG fea9444e952b83a751b69dd3187163d41a861567
+        GIT_TAG cbf7f5ffb5a3c07f6a8f02d5fc9e425dca572bbc
 )
 
 FetchContent_MakeAvailable(elf)

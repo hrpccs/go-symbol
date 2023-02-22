@@ -2,6 +2,7 @@
 #include <elf/symbol.h>
 #include <zero/log.h>
 #include <algorithm>
+#include <fcntl.h>
 
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 0x1000
@@ -22,7 +23,8 @@ constexpr auto SYMBOL_MAGIC_116 = 0xfffffffa;
 constexpr auto SYMBOL_MAGIC_118 = 0xfffffff0;
 constexpr auto SYMBOL_MAGIC_120 = 0xfffffff1;
 
-go::symbol::Reader::Reader(elf::Reader reader) : mReader(std::move(reader)) {
+go::symbol::Reader::Reader(elf::Reader reader, std::filesystem::path path)
+        : mReader(std::move(reader)), mPath(std::move(path)) {
 
 }
 
@@ -106,7 +108,7 @@ std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {
     return BuildInfo(mReader, *it);
 }
 
-std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(AccessMethod method, uint64_t base) {
+std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(uint64_t base) {
     std::vector<std::shared_ptr<elf::ISection>> sections = mReader.sections();
 
     auto it = std::find_if(
@@ -174,18 +176,21 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(AccessMethod 
             }
     )->operator*().virtualAddress() & ~(PAGE_SIZE - 1);
 
-    if (method == FileMapping) {
-        return SymbolTable(version, converter, *it, dynamic ? base - minVA : 0);
-    } else if (method == AnonymousMemory) {
-        std::unique_ptr<std::byte[]> buffer = std::make_unique<std::byte[]>(it->operator*().size());
-        memcpy(buffer.get(), it->operator*().data(), it->operator*().size());
-        return SymbolTable(version, converter, std::move(buffer), dynamic ? base - minVA : 0);
+    int fd = open(mPath.string().c_str(), O_RDONLY);
+
+    if (fd < 0) {
+        LOG_ERROR("open %s failed: %s", mPath.string().c_str(), strerror(errno));
+        return std::nullopt;
     }
 
-    if (!dynamic)
-        return SymbolTable(version, converter, (const std::byte *) it->operator*().address(), 0);
-
-    return SymbolTable(version, converter, (const std::byte *) base + it->operator*().address() - minVA, 0);
+    return std::make_optional<SymbolTable>(
+            version,
+            converter,
+            fd,
+            (off64_t) it.operator*()->offset(),
+            it->operator*().address(),
+            dynamic ? base - minVA : 0
+    );
 }
 
 std::optional<go::symbol::InterfaceTable> go::symbol::Reader::interfaces(uint64_t base) {
@@ -275,5 +280,5 @@ std::optional<go::symbol::Reader> go::symbol::openFile(const std::filesystem::pa
         return std::nullopt;
     }
 
-    return Reader(*reader);
+    return Reader(*reader, path);
 }
