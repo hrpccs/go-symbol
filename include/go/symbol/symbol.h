@@ -4,6 +4,7 @@
 #include <variant>
 #include <elf/reader.h>
 #include <go/endian.h>
+#include <fstream>
 
 namespace go::symbol {
     enum SymbolVersion {
@@ -22,34 +23,31 @@ namespace go::symbol {
                 SymbolVersion
                 version,
                 endian::Converter converter,
-                int fd,
-                off64_t offset,
+                std::ifstream stream,
+                std::streamoff offset,
                 uint64_t address,
                 uint64_t base
         );
 
-        SymbolTable(SymbolTable &&) = default;
-        ~SymbolTable();
+    public:
+        SymbolIterator find(uint64_t address);
+        SymbolIterator find(std::string_view name);
 
     public:
-        [[nodiscard]] SymbolIterator find(uint64_t address) const;
-        [[nodiscard]] SymbolIterator find(std::string_view name) const;
+        size_t size() const;
 
     public:
-        [[nodiscard]] size_t size() const;
+        SymbolEntry operator[](size_t index);
 
     public:
-        [[nodiscard]] SymbolEntry operator[](size_t index) const;
-
-    public:
-        [[nodiscard]] SymbolIterator begin() const;
-        [[nodiscard]] SymbolIterator end() const;
+        SymbolIterator begin();
+        SymbolIterator end();
 
     private:
-        int mFD;
         uint64_t mBase;
-        off64_t mOffset;
         uint64_t mAddress;
+        std::streamoff mOffset;
+        std::ifstream mStream;
         SymbolVersion mVersion;
         endian::Converter mConverter;
         std::unique_ptr<std::byte[]> mFuncTableBuffer;
@@ -75,7 +73,7 @@ namespace go::symbol {
 
     class Symbol {
     public:
-        Symbol(const SymbolTable *table, uint64_t address);
+        Symbol(SymbolTable *table, uint64_t address);
 
     public:
         [[nodiscard]] uint64_t entry() const;
@@ -97,12 +95,12 @@ namespace go::symbol {
 
     private:
         uint64_t mAddress;
-        const SymbolTable *mTable;
+        SymbolTable *mTable;
     };
 
     class SymbolEntry {
     public:
-        SymbolEntry(const SymbolTable *table, uint64_t entry, uint64_t offset);
+        SymbolEntry(SymbolTable *table, uint64_t entry, uint64_t offset);
 
     public:
         [[nodiscard]] uint64_t entry() const;
@@ -111,7 +109,7 @@ namespace go::symbol {
     private:
         uint64_t mEntry;
         uint64_t mOffset;
-        const SymbolTable *mTable;
+        SymbolTable *mTable;
     };
 
     class SymbolIterator {
@@ -123,7 +121,7 @@ namespace go::symbol {
         using iterator_category = std::random_access_iterator_tag;
 
     public:
-        SymbolIterator(const SymbolTable *table, const std::byte *buffer);
+        SymbolIterator(SymbolTable *table, const std::byte *buffer);
 
     public:
         SymbolEntry operator*();
@@ -142,8 +140,8 @@ namespace go::symbol {
 
     private:
         size_t mSize;
+        SymbolTable *mTable;
         const std::byte *mBuffer;
-        const SymbolTable *mTable;
     };
 }
 

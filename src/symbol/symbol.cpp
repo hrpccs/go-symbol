@@ -20,15 +20,16 @@ constexpr auto STACK_TOP_FUNCTION = {
 go::symbol::SymbolTable::SymbolTable(
         SymbolVersion version,
         endian::Converter converter,
-        int fd,
-        off64_t offset,
+        std::ifstream stream,
+        std::streamoff offset,
         uint64_t address,
         uint64_t base
-) : mVersion(version), mConverter(converter), mFD(fd), mOffset(offset), mAddress(address), mBase(base) {
+) : mVersion(version), mConverter(converter), mStream(std::move(stream)), mOffset(offset), mAddress(address),
+    mBase(base) {
     std::byte buffer[128];
 
-    lseek64(mFD, offset, SEEK_SET);
-    read(mFD, buffer, sizeof(buffer));
+    mStream.seekg(mOffset, std::ifstream::beg);
+    mStream.read((char *) buffer, sizeof(buffer));
 
     mQuantum = std::to_integer<uint32_t>(buffer[6]);
     mPtrSize = std::to_integer<uint32_t>(buffer[7]);
@@ -44,14 +45,15 @@ go::symbol::SymbolTable::SymbolTable(
             uint32_t funcTableSize = mFuncNum * 2 * mPtrSize + mPtrSize;
             uint32_t fileOffset = 0;
 
-            lseek64(mFD, mOffset + (off64_t) (mFuncTable + funcTableSize - mAddress), SEEK_SET);
-            read(mFD, &fileOffset, sizeof(uint32_t));
+            mStream.seekg(mOffset + (std::streamoff) (mFuncTable + funcTableSize - mAddress), std::ifstream::beg);
+            mStream.read((char *) &fileOffset, sizeof(uint32_t));
             fileOffset = mConverter(fileOffset);
 
             mFileTable = mAddress + fileOffset;
 
-            lseek64(mFD, mOffset + (off64_t) (mFileTable - mAddress), SEEK_SET);
-            read(mFD, &mFileNum, sizeof(uint32_t));
+            mStream.seekg(mOffset + (std::streamoff) (mFileTable - mAddress), std::ifstream::beg);
+            mStream.read((char *) &mFileNum, sizeof(uint32_t));
+
             mFileNum = mConverter(mFileNum);
 
             break;
@@ -92,15 +94,11 @@ go::symbol::SymbolTable::SymbolTable(
     uint64_t size = (mFuncNum + 1) * 2 * (mVersion >= VERSION118 ? 4 : mPtrSize);
     mFuncTableBuffer = std::make_unique<std::byte[]>(size);
 
-    lseek64(mFD, mOffset + (off64_t) (mFuncTable - mAddress), SEEK_SET);
-    read(mFD, mFuncTableBuffer.get(), size);
+    mStream.seekg(mOffset + (std::streamoff) (mFuncTable - mAddress), std::ifstream::beg);
+    mStream.read((char *) mFuncTableBuffer.get(), (std::streamsize) size);
 }
 
-go::symbol::SymbolTable::~SymbolTable() {
-    close(mFD);
-}
-
-go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) const {
+go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) {
     if (address < operator[](0).entry() || address >= operator[](mFuncNum).entry())
         return end();
 
@@ -109,7 +107,7 @@ go::symbol::SymbolIterator go::symbol::SymbolTable::find(uint64_t address) const
     }) - 1;
 }
 
-go::symbol::SymbolIterator go::symbol::SymbolTable::find(std::string_view name) const {
+go::symbol::SymbolIterator go::symbol::SymbolTable::find(std::string_view name) {
     return std::find_if(begin(), end(), [=](const auto &entry) {
         return name == entry.symbol().name();
     });
@@ -119,19 +117,19 @@ size_t go::symbol::SymbolTable::size() const {
     return mFuncNum;
 }
 
-go::symbol::SymbolEntry go::symbol::SymbolTable::operator[](size_t index) const {
+go::symbol::SymbolEntry go::symbol::SymbolTable::operator[](size_t index) {
     return *(begin() + std::ptrdiff_t(index));
 }
 
-go::symbol::SymbolIterator go::symbol::SymbolTable::begin() const {
+go::symbol::SymbolIterator go::symbol::SymbolTable::begin() {
     return {this, mFuncTableBuffer.get()};
 }
 
-go::symbol::SymbolIterator go::symbol::SymbolTable::end() const {
+go::symbol::SymbolIterator go::symbol::SymbolTable::end() {
     return begin() + mFuncNum;
 }
 
-go::symbol::Symbol::Symbol(const go::symbol::SymbolTable *table, uint64_t address) : mTable(table), mAddress(address) {
+go::symbol::Symbol::Symbol(go::symbol::SymbolTable *table, uint64_t address) : mTable(table), mAddress(address) {
 
 }
 
@@ -139,8 +137,8 @@ uint64_t go::symbol::Symbol::entry() const {
     if (mTable->mVersion < VERSION118) {
         std::byte buffer[8] = {};
 
-        lseek64(mTable->mFD, mTable->mOffset + (off64_t) (mAddress - mTable->mAddress), SEEK_SET);
-        read(mTable->mFD, &buffer, mTable->mPtrSize);
+        mTable->mStream.seekg(mTable->mOffset + (std::streamoff) (mAddress - mTable->mAddress), std::ifstream::beg);
+        mTable->mStream.read((char *) &buffer, mTable->mPtrSize);
 
         if (mTable->mPtrSize == 4)
             return mTable->mBase + mTable->mConverter(*(uint32_t *) buffer);
@@ -150,25 +148,20 @@ uint64_t go::symbol::Symbol::entry() const {
 
     uint32_t entry;
 
-    lseek64(mTable->mFD, mTable->mOffset + (off64_t) (mAddress - mTable->mAddress), SEEK_SET);
-    read(mTable->mFD, &entry, sizeof(uint32_t));
+    mTable->mStream.seekg(mTable->mOffset + (std::streamoff) (mAddress - mTable->mAddress), std::ifstream::beg);
+    mTable->mStream.read((char *) &entry, sizeof(uint32_t));
 
     return mTable->mBase + mTable->mConverter(entry);
 }
 
 std::string go::symbol::Symbol::name() const {
-    lseek64(mTable->mFD, mTable->mOffset + (off64_t) (mTable->mFuncNameTable + field(1) - mTable->mAddress), SEEK_SET);
+    mTable->mStream.seekg(
+            mTable->mOffset + (std::streamoff) (mTable->mFuncNameTable + field(1) - mTable->mAddress),
+            std::ifstream::beg
+    );
 
     std::string name;
-
-    while (true) {
-        char c;
-
-        if (read(mTable->mFD, &c, sizeof(char)) != 1 || !c)
-            break;
-
-        name.push_back(c);
-    }
+    std::getline(mTable->mStream, name, '\0');
 
     return name;
 }
@@ -206,52 +199,45 @@ std::string go::symbol::Symbol::sourceFile(uint64_t pc) const {
 
         int offset;
 
-        lseek64(mTable->mFD, mTable->mOffset + (off64_t) (mTable->mFileTable + n * 4 - mTable->mAddress), SEEK_SET);
-        read(mTable->mFD, &offset, sizeof(int));
+        mTable->mStream.seekg(
+                mTable->mOffset + (std::streamoff) (mTable->mFileTable + n * 4 - mTable->mAddress),
+                std::ifstream::beg
+        );
 
+        mTable->mStream.read((char *) &offset, sizeof(int));
         offset = mTable->mConverter(offset);
-        lseek64(mTable->mFD, mTable->mOffset + (off64_t) (mTable->mFuncData + offset - mTable->mAddress), SEEK_SET);
+
+        mTable->mStream.seekg(
+                mTable->mOffset + (std::streamoff) (mTable->mFuncData + offset - mTable->mAddress),
+                std::ifstream::beg
+        );
 
         std::string name;
-
-        while (true) {
-            char c;
-
-            if (read(mTable->mFD, &c, sizeof(char)) != 1 || !c)
-                break;
-
-            name.push_back(c);
-        }
+        std::getline(mTable->mStream, name, '\0');
 
         return name;
     }
 
     uint32_t offset;
 
-    lseek64(
-            mTable->mFD,
-            mTable->mOffset + (off64_t) (mTable->mCuTable + (field(8) + n) * 4 - mTable->mAddress),
-            SEEK_SET
+    mTable->mStream.seekg(
+            mTable->mOffset + (std::streamoff) (mTable->mCuTable + (field(8) + n) * 4 - mTable->mAddress),
+            std::ifstream::beg
     );
 
-    read(mTable->mFD, &offset, sizeof(uint32_t));
+    mTable->mStream.read((char *) &offset, sizeof(uint32_t));
     offset = mTable->mConverter(offset);
 
     if (!offset)
         return "";
 
-    lseek64(mTable->mFD, mTable->mOffset + (off64_t) (mTable->mFileTable + offset - mTable->mAddress), SEEK_SET);
+    mTable->mStream.seekg(
+            mTable->mOffset + (std::streamoff) (mTable->mFileTable + offset - mTable->mAddress),
+            std::ifstream::beg
+    );
 
     std::string name;
-
-    while (true) {
-        char c;
-
-        if (read(mTable->mFD, &c, sizeof(char)) != 1 || !c)
-            break;
-
-        name.push_back(c);
-    }
+    std::getline(mTable->mStream, name, '\0');
 
     return name;
 }
@@ -263,31 +249,29 @@ bool go::symbol::Symbol::isStackTop() const {
 }
 
 uint32_t go::symbol::Symbol::field(int n) const {
-    lseek64(
-            mTable->mFD,
+    mTable->mStream.seekg(
             mTable->mOffset +
-            (off64_t) (mAddress + (mTable->mVersion >= VERSION118 ? 4 : mTable->mPtrSize) + (n - 1) * 4 -
-                       mTable->mAddress),
-            SEEK_SET
+            (std::streamoff) (mAddress + (mTable->mVersion >= VERSION118 ? 4 : mTable->mPtrSize) + (n - 1) * 4 -
+                              mTable->mAddress),
+            std::ifstream::beg
     );
 
     uint32_t value;
-    read(mTable->mFD, &value, sizeof(uint32_t));
+    mTable->mStream.read((char *) &value, sizeof(uint32_t));
 
     return mTable->mConverter(value);
 }
 
 int go::symbol::Symbol::value(uint32_t offset, uint64_t entry, uint64_t target) const {
-    lseek64(
-            mTable->mFD,
-            mTable->mOffset + (off64_t) (mTable->mPCTable + offset - mTable->mAddress),
-            SEEK_SET
+    mTable->mStream.seekg(
+            mTable->mOffset + (std::streamoff) (mTable->mPCTable + offset - mTable->mAddress),
+            std::ifstream::beg
     );
 
     int length = 0;
     std::byte buffer[1024];
 
-    read(mTable->mFD, buffer, sizeof(buffer));
+    mTable->mStream.read((char *) buffer, sizeof(buffer));
 
     int value = -1;
     uint64_t pc = entry;
@@ -319,7 +303,7 @@ int go::symbol::Symbol::value(uint32_t offset, uint64_t entry, uint64_t target) 
             continue;
 
         memcpy(buffer, buffer + length, sizeof(buffer) - length);
-        read(mTable->mFD, buffer + sizeof(buffer) - length, length);
+        mTable->mStream.read((char *) buffer + sizeof(buffer) - length, length);
 
         length = 0;
     }
@@ -327,7 +311,7 @@ int go::symbol::Symbol::value(uint32_t offset, uint64_t entry, uint64_t target) 
     return value;
 }
 
-go::symbol::SymbolEntry::SymbolEntry(const go::symbol::SymbolTable *table, uint64_t entry, uint64_t offset)
+go::symbol::SymbolEntry::SymbolEntry(go::symbol::SymbolTable *table, uint64_t entry, uint64_t offset)
         : mTable(table), mEntry(entry), mOffset(offset) {
 
 }
@@ -340,7 +324,7 @@ go::symbol::Symbol go::symbol::SymbolEntry::symbol() const {
     return {mTable, mTable->mFuncData + mOffset};
 }
 
-go::symbol::SymbolIterator::SymbolIterator(const go::symbol::SymbolTable *table, const std::byte *buffer)
+go::symbol::SymbolIterator::SymbolIterator(go::symbol::SymbolTable *table, const std::byte *buffer)
         : mTable(table), mBuffer(buffer), mSize(table->mVersion >= VERSION118 ? 4 : table->mPtrSize) {
 
 }

@@ -2,7 +2,6 @@
 #include <elf/symbol.h>
 #include <zero/log.h>
 #include <algorithm>
-#include <fcntl.h>
 
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 0x1000
@@ -176,9 +175,9 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(uint64_t base
             }
     )->operator*().virtualAddress() & ~(PAGE_SIZE - 1);
 
-    int fd = open(mPath.string().c_str(), O_RDONLY);
+    std::ifstream stream(mPath);
 
-    if (fd < 0) {
+    if (!stream.is_open()) {
         LOG_ERROR("open %s failed: %s", mPath.string().c_str(), strerror(errno));
         return std::nullopt;
     }
@@ -186,8 +185,8 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(uint64_t base
     return SymbolTable(
             version,
             converter,
-            fd,
-            (off64_t) it.operator*()->offset(),
+            std::move(stream),
+            (std::streamoff) it.operator*()->offset(),
             it->operator*().address(),
             dynamic ? base - minVA : 0
     );
