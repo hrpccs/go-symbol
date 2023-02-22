@@ -12,7 +12,10 @@ namespace go::symbol {
         Attached
     };
 
-    class Reader : public elf::Reader {
+    class Reader {
+    public:
+        explicit Reader(elf::Reader reader);
+
     private:
         size_t ptrSize();
         elf::endian::Type endian();
@@ -24,7 +27,12 @@ namespace go::symbol {
         std::optional<BuildInfo> buildInfo();
         std::optional<SymbolTable> symbols(AccessMethod method, uint64_t base = 0);
         std::optional<InterfaceTable> interfaces(uint64_t base = 0);
+
+    private:
+        elf::Reader mReader;
     };
+
+    std::optional<Reader> openFile(const std::filesystem::path &path);
 }
 
 #endif //GO_SYMBOL_READER_H

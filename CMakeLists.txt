@@ -11,7 +11,7 @@ include(FetchContent)
 FetchContent_Declare(
         zero
         GIT_REPOSITORY https://github.com/Hackerl/zero
-        GIT_TAG 80a6c7a972bb8f049db1815fe6bbd396be6ca531
+        GIT_TAG df739d44cacc95cf10251c0dbede56bc1f0b18bb
 )
 
 FetchContent_MakeAvailable(zero)
@@ -19,7 +19,7 @@ FetchContent_MakeAvailable(zero)
 FetchContent_Declare(
         elf
         GIT_REPOSITORY https://github.com/Hackerl/elf
-        GIT_TAG d38376cf6e3fdd6a06f0bc5d5969d390559574e5
+        GIT_TAG fea9444e952b83a751b69dd3187163d41a861567
 )
 
 FetchContent_MakeAvailable(elf)
