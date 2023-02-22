@@ -17,7 +17,6 @@ namespace go::symbol {
     class SymbolIterator;
 
     class SymbolTable {
-        using MemoryBuffer = std::variant<std::shared_ptr<elf::ISection>, std::unique_ptr<std::byte[]>, const std::byte *>;
     public:
         SymbolTable(
                 SymbolVersion
@@ -29,6 +28,7 @@ namespace go::symbol {
                 uint64_t base
         );
 
+        SymbolTable(SymbolTable &&) = default;
         ~SymbolTable();
 
     public:

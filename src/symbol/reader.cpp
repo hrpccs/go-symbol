@@ -183,7 +183,7 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(uint64_t base
         return std::nullopt;
     }
 
-    return std::make_optional<SymbolTable>(
+    return SymbolTable(
             version,
             converter,
             fd,
