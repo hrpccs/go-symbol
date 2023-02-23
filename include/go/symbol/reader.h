@@ -6,6 +6,12 @@
 #include "build_info.h"
 
 namespace go::symbol {
+    enum AccessMethod {
+        FileMapping,
+        AnonymousMemory,
+        Attached
+    };
+
     class Reader {
     public:
         Reader(elf::Reader reader, std::filesystem::path path);
@@ -19,7 +25,8 @@ namespace go::symbol {
 
     public:
         std::optional<BuildInfo> buildInfo();
-        std::optional<SymbolTable> symbols(uint64_t base = 0);
+        std::optional<seek::SymbolTable> symbols(uint64_t base = 0);
+        std::optional<SymbolTable> symbols(AccessMethod method, uint64_t base = 0);
         std::optional<InterfaceTable> interfaces(uint64_t base = 0);
 
     private:

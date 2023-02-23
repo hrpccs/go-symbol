@@ -107,7 +107,7 @@ std::optional<go::symbol::BuildInfo> go::symbol::Reader::buildInfo() {
     return BuildInfo(mReader, *it);
 }
 
-std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(uint64_t base) {
+std::optional<go::symbol::seek::SymbolTable> go::symbol::Reader::symbols(uint64_t base) {
     std::vector<std::shared_ptr<elf::ISection>> sections = mReader.sections();
 
     auto it = std::find_if(
@@ -182,7 +182,7 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(uint64_t base
         return std::nullopt;
     }
 
-    return SymbolTable(
+    return seek::SymbolTable(
             version,
             converter,
             std::move(stream),
@@ -190,6 +190,88 @@ std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(uint64_t base
             it->operator*().address(),
             dynamic ? base - minVA : 0
     );
+}
+
+std::optional<go::symbol::SymbolTable> go::symbol::Reader::symbols(AccessMethod method, uint64_t base) {
+    std::vector<std::shared_ptr<elf::ISection>> sections = mReader.sections();
+
+    auto it = std::find_if(
+            sections.begin(),
+            sections.end(),
+            [](const auto &section) {
+                return section->name().find(SYMBOL_SECTION) != std::string::npos;
+            }
+    );
+
+    if (it == sections.end()) {
+        LOG_ERROR("symbol section not found");
+        return std::nullopt;
+    }
+
+    const std::byte *data = it->operator*().data();
+
+    elf::endian::Type endian = this->endian();
+    endian::Converter converter(endian);
+
+    uint32_t magic = converter(*(uint32_t *) data);
+
+    SymbolVersion version;
+
+    switch (magic) {
+        case SYMBOL_MAGIC_12:
+            version = VERSION12;
+            break;
+
+        case SYMBOL_MAGIC_116:
+            version = VERSION116;
+            break;
+
+        case SYMBOL_MAGIC_118:
+            version = VERSION118;
+            break;
+
+        case SYMBOL_MAGIC_120:
+            version = VERSION120;
+            break;
+
+        default:
+            return std::nullopt;
+    }
+
+    bool dynamic = mReader.header()->type() == ET_DYN;
+
+    std::vector<std::shared_ptr<elf::ISegment>> loads;
+    std::vector<std::shared_ptr<elf::ISegment>> segments = mReader.segments();
+
+    std::copy_if(
+            segments.begin(),
+            segments.end(),
+            std::back_inserter(loads),
+            [](const auto &segment) {
+                return segment->type() == PT_LOAD;
+            }
+    );
+
+    Elf64_Addr minVA = std::min_element(
+            loads.begin(),
+            loads.end(),
+            [](const auto &i, const auto &j) {
+                return i->virtualAddress() < j->virtualAddress();
+            }
+    )->operator*().virtualAddress() & ~(PAGE_SIZE - 1);
+
+    if (method == FileMapping) {
+        return SymbolTable(version, converter, *it, dynamic ? base - minVA : 0);
+    } else if (method == AnonymousMemory) {
+        std::unique_ptr<std::byte[]> buffer = std::make_unique<std::byte[]>(it->operator*().size());
+        memcpy(buffer.get(), it->operator*().data(), it->operator*().size());
+        return SymbolTable(version, converter, std::move(buffer), dynamic ? base - minVA : 0);
+    }
+
+    if (!dynamic)
+        return SymbolTable(version, converter, (const std::byte *) it->operator*().address(), 0);
+
+    return SymbolTable(version, converter, (const std::byte *) base + it->operator*().address() - minVA, 0);
 }
 
 std::optional<go::symbol::InterfaceTable> go::symbol::Reader::interfaces(uint64_t base) {
