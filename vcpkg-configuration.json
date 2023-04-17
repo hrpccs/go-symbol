@@ -1,0 +1,13 @@
+{
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "https://github.com/Hackerl/vcpkg-registry",
+      "baseline": "c319990bbcc5a7155099fd01a609be8d6f072f4f",
+      "packages": [
+        "zero",
+        "elf-cpp"
+      ]
+    }
+  ]
+}

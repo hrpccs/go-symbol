@@ -1,28 +1,18 @@
 cmake_minimum_required(VERSION 3.17)
-project(go_symbol)
+project(go-symbol)
 
 set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib)
 
-include(FetchContent)
+set(GO_SYMBOL_VERSION 1.0.0)
 
-FetchContent_Declare(
-        zero
-        GIT_REPOSITORY https://github.com/Hackerl/zero
-        GIT_TAG df739d44cacc95cf10251c0dbede56bc1f0b18bb
-)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
-FetchContent_MakeAvailable(zero)
-
-FetchContent_Declare(
-        elf
-        GIT_REPOSITORY https://github.com/Hackerl/elf
-        GIT_TAG cbf7f5ffb5a3c07f6a8f02d5fc9e425dca572bbc
-)
-
-FetchContent_MakeAvailable(elf)
+find_package(zero CONFIG REQUIRED)
+find_package(elf-cpp CONFIG REQUIRED)
 
 add_library(
         go_symbol
@@ -34,5 +24,48 @@ add_library(
         src/symbol/interface.cpp
 )
 
-target_include_directories(go_symbol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(go_symbol zero elf_cpp)
+target_include_directories(
+        go_symbol
+        PUBLIC
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+target_link_libraries(go_symbol PUBLIC zero::zero elf::elf_cpp)
+
+install(
+        DIRECTORY
+        include/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(
+        TARGETS go_symbol
+        EXPORT ${PROJECT_NAME}Targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(
+        EXPORT ${PROJECT_NAME}Targets
+        NAMESPACE go::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+)
+
+configure_package_config_file(
+        cmake/${PROJECT_NAME}-config.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+)
+
+write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
+        VERSION ${GO_SYMBOL_VERSION}
+        COMPATIBILITY SameMajorVersion
+)
+
+install(
+        FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+)
