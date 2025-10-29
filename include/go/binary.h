@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <optional>
+#include <utility>
 
 namespace go::binary {
     std::optional<std::pair<int64_t, int>> varInt(const std::byte *buffer);
