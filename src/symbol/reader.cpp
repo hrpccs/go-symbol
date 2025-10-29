@@ -2,6 +2,8 @@
 #include <elf/symbol.h>
 #include <zero/log.h>
 #include <algorithm>
+#include <optional>
+#include <cstdint>
 
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 0x1000
@@ -354,12 +356,12 @@ std::optional<go::symbol::InterfaceTable> go::symbol::Reader::interfaces(uint64_
 }
 
 std::optional<go::symbol::Reader> go::symbol::openFile(const std::filesystem::path &path) {
-    std::optional<elf::Reader> reader = elf::openFile(path);
+    auto readerResult = elf::openFile(path);
 
-    if (!reader) {
+    if (!readerResult) {
         LOG_ERROR("open elf file failed");
         return std::nullopt;
     }
 
-    return Reader(*reader, path);
+    return Reader(*readerResult, path);
 }

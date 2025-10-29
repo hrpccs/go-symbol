@@ -3,6 +3,7 @@
 
 #include <elf/endian.h>
 #include <stdexcept>
+#include <cstdint>
 
 namespace go::endian {
     class Converter {
@@ -15,9 +16,9 @@ namespace go::endian {
         template<typename T>
         T operator()(T bits) const {
             if (mEndian == elf::endian::Little)
-                return elf::endian::little(bits);
+                return elf::endian::convert<elf::endian::Little>(bits);
 
-            return elf::endian::big(bits);
+            return elf::endian::convert<elf::endian::Big>(bits);
         }
 
         uint64_t operator()(const void *ptr, size_t size) const {
